@@ -55,7 +55,14 @@ rl.on('line', (line) => {
   prevCity = nextCity;
   prevGame = nextGame;
 });
+
 rl.on('close', function () {
+  let db = new sqlite3.Database('databases/olympic_history.db', sqlite3.OPEN_READWRITE, (err) => {
+    if (err) {
+      return console.error(err.message);
+    }
+    console.log('Connected to the olympic_history database.');
+  });
 
   // console.log(athletesSet);
   // console.log(sportsSet);
@@ -63,4 +70,25 @@ rl.on('close', function () {
   // console.log(teamsObj);
   // console.log(gamesObj);
 
+  // insertSet(sportsSet, db);
+  // insertSet(eventsSet, db);
+
+  db.close((err) => {
+    if (err) {
+      return console.error(err.message);
+    }
+    console.log('Close the database connection.');
+  });
 });
+
+function insertSet (set, db) {
+  let array = Array.from(set);
+  let placeholders = array.map((arg) => '(?)').join(',');
+  let sql = 'INSERT INTO sports(name) VALUES ' + placeholders;
+  db.run(sql, array, function (err) {
+    if (err) {
+      return console.error(err.message);
+    }
+    console.log(`Rows inserted ${this.changes}`);
+  });
+}
