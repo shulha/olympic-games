@@ -19,10 +19,8 @@ let resultsArray = [];
 let prevGame = '';
 let prevCity = '';
 
-let teamsTable = [];
-
 rl.on('line', (line) => {
-  let arr = line.split(',');
+  let arr = csvToArray(line).shift();
 
   let sex = (arr[2] !== 'NA') ? arr[2] : null;
   let age = +arr[3] ? +arr[3] : null;
@@ -32,8 +30,7 @@ rl.on('line', (line) => {
 
   let noc = arr[7];
 
-  // let athleteName = arr[1].replace(/"+([^"]+)"+\s|"|(\(.*?\))*/g, '').trim();
-  let athleteName = arr[1];
+  let athleteName = arr[1].replace(/"+([^"]+)"+\s|"|(\(.*?\))*/g, '').trim();
 
   let athleteData = [
     sex,
@@ -58,6 +55,26 @@ rl.on('line', (line) => {
   }
   prevCity = nextCity;
   prevGame = nextGame;
+
+  let medalFile = arr[14];
+  if (nextGame !== '1906 Summer') {
+    let medal;
+    switch (medalFile) {
+      case 'NA':
+        medal = 0;
+        break;
+      case 'Gold':
+        medal = 1;
+        break;
+      case 'Silver':
+        medal = 2;
+        break;
+      case 'Bronze':
+        medal = 3;
+        break;
+    }
+    resultsArray.push([athleteName, arr[8], arr[12], arr[13], medal]);
+  }
 });
 
 rl.on('close', function () {
@@ -68,10 +85,26 @@ rl.on('close', function () {
     console.log('Connected to the olympic_history database.');
   });
 
-  db.parallelize(function () {
+  db.serialize(() => {
     insertSet(sportsSet, db, 'sports');
 
     insertSet(eventsSet, db, 'events');
+
+    let resultsCnt = 0; let gamesCnt = 0; let teamsCnt = 0; let athletesCnt = 0;
+
+    for (let oneRow of resultsArray) {
+      db.run(
+        'INSERT INTO results (athlete_id, game_id, sport_id, event_id, medal) VALUES (?,?,?,?,?)',
+        oneRow,
+        function (err) {
+          if (err) {
+            return console.error(err.message);
+          }
+          resultsCnt += this.changes;
+          console.log(`Rows inserted ${resultsCnt} to "results"`);
+        }
+      );
+    }
 
     for (let game in gamesObj) {
       let cities = gamesObj[game];
@@ -85,13 +118,12 @@ rl.on('close', function () {
           if (err) {
             return console.error(err.message);
           }
-          console.log(`Rows inserted ${this.changes} to games`);
+          gamesCnt += this.changes;
+          console.log(`Rows inserted ${gamesCnt} to "games"`);
         }
       );
     }
-  });
 
-  db.serialize(() => {
     for (let key in teamsObj) {
       db.run(
         'INSERT INTO teams (name, noc_name) VALUES (?,?)',
@@ -100,39 +132,32 @@ rl.on('close', function () {
           if (err) {
             return console.error(err.message);
           }
-          console.log(`Rows inserted ${this.changes} to teams`);
-          teamsTable[key] = this.lastID;
+          teamsCnt += this.changes;
+          console.log(`Rows inserted ${teamsCnt} to "teams"`);
         }
       );
     }
-    db.serialize(() => {
-      db.all('SELECT id, noc_name FROM teams', [], (err, rows) => {
-        if (err) {
-          throw err;
-        }
-        rows.forEach((row) => {
-          teamsTable[row.noc_name] = row.id;
-          console.log(row.noc_name);
-          console.log(teamsTable);
-        });
-      });
-      for (let athlete in athletesObj) {
-        console.log(teamsTable);
-        db.run(
-          'INSERT INTO athletes (full_name, age, sex, params, team_id) VALUES (?,?,?,?,?)',
-          // athlete, athletesObj[athlete][0], athletesObj[athlete][1], athletesObj[athlete][2], teamsTable[athletesObj[athlete][3]],
-          athlete, athletesObj[athlete][0], athletesObj[athlete][1], athletesObj[athlete][2], athletesObj[athlete][3],
-          function (err) {
-            if (err) {
-              return console.error(err.message);
-            }
-            console.log(`Rows inserted ${this.changes} to athletes`);
-            console.log(teamsTable);
+
+    for (let athlete in athletesObj) {
+      db.run(
+        'INSERT INTO athletes (full_name, age, sex, params, team_id) VALUES (?,?,?,?,?)',
+        athlete, athletesObj[athlete][0], athletesObj[athlete][1], athletesObj[athlete][2], athletesObj[athlete][3],
+        function (err) {
+          if (err) {
+            return console.error(err.message);
           }
-        );
-      }
-    });
+          athletesCnt += this.changes;
+          console.log(`Rows inserted ${athletesCnt} to "athletes"`);
+        }
+      );
+    }
   });
+
+  updateTable(db, 'noc_name', 'team');
+  updateTable(db, 'full_name', 'athlete');
+  updateTable(db, 'name', 'sport');
+  updateTable(db, 'name', 'event');
+  updateTable(db, 'year, season', 'game');
 
   db.close((err) => {
     if (err) {
@@ -142,6 +167,44 @@ rl.on('close', function () {
   });
 });
 
+function updateTable (db, colName, selectedTable) {
+  let tmpArray = [];
+  db.all('SELECT id, ' + colName + ' FROM ' + selectedTable + 's', [], (err, rows) => {
+    if (err) {
+      throw err;
+    }
+
+    if (selectedTable === 'game') {
+      rows.forEach((row) => {
+        let season = (row.season === 0) ? 'Summer' : 'Winter';
+        tmpArray.push([row.id, row.year + ' ' + season]);
+      });
+    } else {
+      rows.forEach((row) => {
+        tmpArray.push([row.id, row[colName]]);
+      });
+    }
+
+    let _table = 'results';
+    if (selectedTable === 'team') {
+      _table = 'athletes';
+    }
+
+    for (let data of tmpArray) {
+      let sql = `UPDATE ${_table}
+        SET ${selectedTable}_id = ?
+        WHERE ${selectedTable}_id = ?`;
+
+      db.run(sql, data, function (err) {
+        if (err) {
+          return console.error(err.message);
+        }
+        console.log(`Row(s) updated: ${this.changes} in "${_table}"`);
+      });
+    }
+  });
+}
+
 function insertSet (set, db, table) {
   let array = Array.from(set);
   let placeholders = array.map((arg) => '(?)').join(',');
@@ -150,6 +213,22 @@ function insertSet (set, db, table) {
     if (err) {
       return console.error(err.message);
     }
-    console.log(`Rows inserted ${this.changes} to ${table}`);
+    console.log(`Rows inserted ${this.changes} to "${table}"`);
   });
+}
+
+function csvToArray (text) {
+  let p = ''; let row = ['']; let ret = [row]; let i = 0; let r = 0; let s = !0; let l;
+  for (l of text) {
+    if (l === '"') {
+      if (s && l === p) row[i] += l;
+      s = !s;
+    } else if (l === ',' && s) l = row[++i] = '';
+    else if (l === '\n' && s) {
+      if (p === '\r') row[i] = row[i].slice(0, -1);
+      row = ret[++r] = [l = '']; i = 0;
+    } else row[i] += l;
+    p = l;
+  }
+  return ret;
 }
