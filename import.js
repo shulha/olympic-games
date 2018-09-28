@@ -3,8 +3,8 @@ const readline = require('readline');
 const fs = require('fs');
 
 const rl = readline.createInterface({
-  input: fs.createReadStream('databases/sandbox.csv', {
-    start: 80
+  input: fs.createReadStream('databases/athlete_events.csv', {
+    start: 111
   }),
   crlfDelay: Infinity
 });
@@ -32,13 +32,12 @@ rl.on('line', (line) => {
 
   let athleteName = arr[1].replace(/"+([^"]+)"+\s|"|(\(.*?\))*/g, '').trim();
 
-  let athleteData = [
+  athletesObj[athleteName] = [
     sex,
     age,
     JSON.stringify(params),
     noc
   ];
-  athletesObj[athleteName] = athleteData;
 
   sportsSet.add(arr[12]);
 
@@ -79,9 +78,8 @@ rl.on('line', (line) => {
 
 rl.on('close', function () {
   let db = new sqlite3.Database('databases/olympic_history.db', sqlite3.OPEN_READWRITE, (err) => {
-    if (err) {
-      return console.error(err.message);
-    }
+    if (err) throw err;
+
     console.log('Connected to the olympic_history database.');
   });
 
@@ -97,9 +95,8 @@ rl.on('close', function () {
         'INSERT INTO results (athlete_id, game_id, sport_id, event_id, medal) VALUES (?,?,?,?,?)',
         oneRow,
         function (err) {
-          if (err) {
-            return console.error(err.message);
-          }
+          if (err) throw err;
+
           resultsCnt += this.changes;
           console.log(`Rows inserted ${resultsCnt} to "results"`);
         }
@@ -115,9 +112,8 @@ rl.on('close', function () {
         'INSERT INTO games (year, season, city) VALUES (?,?,?)',
         year, season, cities,
         function (err) {
-          if (err) {
-            return console.error(err.message);
-          }
+          if (err) throw err;
+
           gamesCnt += this.changes;
           console.log(`Rows inserted ${gamesCnt} to "games"`);
         }
@@ -129,9 +125,8 @@ rl.on('close', function () {
         'INSERT INTO teams (name, noc_name) VALUES (?,?)',
         teamsObj[key], key,
         function (err) {
-          if (err) {
-            return console.error(err.message);
-          }
+          if (err) throw err;
+
           teamsCnt += this.changes;
           console.log(`Rows inserted ${teamsCnt} to "teams"`);
         }
@@ -143,9 +138,8 @@ rl.on('close', function () {
         'INSERT INTO athletes (full_name, age, sex, params, team_id) VALUES (?,?,?,?,?)',
         athlete, athletesObj[athlete][0], athletesObj[athlete][1], athletesObj[athlete][2], athletesObj[athlete][3],
         function (err) {
-          if (err) {
-            return console.error(err.message);
-          }
+          if (err) throw err;
+
           athletesCnt += this.changes;
           console.log(`Rows inserted ${athletesCnt} to "athletes"`);
         }
@@ -160,9 +154,8 @@ rl.on('close', function () {
   updateTable(db, 'year, season', 'game');
 
   db.close((err) => {
-    if (err) {
-      return console.error(err.message);
-    }
+    if (err) throw err;
+
     console.log('Close the database connection.');
   });
 });
@@ -170,9 +163,7 @@ rl.on('close', function () {
 function updateTable (db, colName, selectedTable) {
   let tmpArray = [];
   db.all('SELECT id, ' + colName + ' FROM ' + selectedTable + 's', [], (err, rows) => {
-    if (err) {
-      throw err;
-    }
+    if (err) throw err;
 
     if (selectedTable === 'game') {
       rows.forEach((row) => {
@@ -196,9 +187,8 @@ function updateTable (db, colName, selectedTable) {
         WHERE ${selectedTable}_id = ?`;
 
       db.run(sql, data, function (err) {
-        if (err) {
-          return console.error(err.message);
-        }
+        if (err) throw err;
+
         console.log(`Row(s) updated: ${this.changes} in "${_table}"`);
       });
     }
@@ -210,9 +200,8 @@ function insertSet (set, db, table) {
   let placeholders = array.map((arg) => '(?)').join(',');
   let sql = 'INSERT INTO ' + table + '(name) VALUES ' + placeholders;
   db.run(sql, array, function (err) {
-    if (err) {
-      return console.error(err.message);
-    }
+    if (err) throw err;
+
     console.log(`Rows inserted ${this.changes} to "${table}"`);
   });
 }
