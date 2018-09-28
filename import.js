@@ -83,75 +83,94 @@ rl.on('close', function () {
     console.log('Connected to the olympic_history database.');
   });
 
+  let resultsCnt = 0; let gamesCnt = 0; let teamsCnt = 0; let athletesCnt = 0;
   db.serialize(() => {
     insertSet(sportsSet, db, 'sports');
 
     insertSet(eventsSet, db, 'events');
 
-    let resultsCnt = 0; let gamesCnt = 0; let teamsCnt = 0; let athletesCnt = 0;
+    db.serialize(function () {
+      db.run('begin');
+      for (let oneRow of resultsArray) {
+        db.run(
+          'INSERT INTO results (athlete_id, game_id, sport_id, event_id, medal) VALUES (?,?,?,?,?)',
+          oneRow,
+          function (err) {
+            if (err) {
+              db.run('rollback');
+              throw err;
+            }
 
-    for (let oneRow of resultsArray) {
-      db.run(
-        'INSERT INTO results (athlete_id, game_id, sport_id, event_id, medal) VALUES (?,?,?,?,?)',
-        oneRow,
-        function (err) {
-          if (err) throw err;
+            resultsCnt += this.changes;
+            console.log(`Rows inserted ${resultsCnt} to "results"`);
+          }
+        );
+      }
+      for (let game in gamesObj) {
+        let cities = gamesObj[game];
+        let gameArray = game.split(' ');
+        let year = gameArray[0];
+        let season = (gameArray[1] === 'Summer') ? 0 : 1;
+        db.run(
+          'INSERT INTO games (year, season, city) VALUES (?,?,?)',
+          year, season, cities,
+          function (err) {
+            if (err) {
+              db.run('rollback');
+              throw err;
+            }
 
-          resultsCnt += this.changes;
-          console.log(`Rows inserted ${resultsCnt} to "results"`);
-        }
-      );
-    }
+            gamesCnt += this.changes;
+            console.log(`Rows inserted ${gamesCnt} to "games"`);
+          }
+        );
+      }
+      for (let key in teamsObj) {
+        db.run(
+          'INSERT INTO teams (name, noc_name) VALUES (?,?)',
+          teamsObj[key], key,
+          function (err) {
+            if (err) {
+              db.run('rollback');
+              throw err;
+            }
 
-    for (let game in gamesObj) {
-      let cities = gamesObj[game];
-      let gameArray = game.split(' ');
-      let year = gameArray[0];
-      let season = (gameArray[1] === 'Summer') ? 0 : 1;
-      db.run(
-        'INSERT INTO games (year, season, city) VALUES (?,?,?)',
-        year, season, cities,
-        function (err) {
-          if (err) throw err;
+            teamsCnt += this.changes;
+            console.log(`Rows inserted ${teamsCnt} to "teams"`);
+          }
+        );
+      }
 
-          gamesCnt += this.changes;
-          console.log(`Rows inserted ${gamesCnt} to "games"`);
-        }
-      );
-    }
-
-    for (let key in teamsObj) {
-      db.run(
-        'INSERT INTO teams (name, noc_name) VALUES (?,?)',
-        teamsObj[key], key,
-        function (err) {
-          if (err) throw err;
-
-          teamsCnt += this.changes;
-          console.log(`Rows inserted ${teamsCnt} to "teams"`);
-        }
-      );
-    }
-
-    for (let athlete in athletesObj) {
-      db.run(
-        'INSERT INTO athletes (full_name, age, sex, params, team_id) VALUES (?,?,?,?,?)',
-        athlete, athletesObj[athlete][0], athletesObj[athlete][1], athletesObj[athlete][2], athletesObj[athlete][3],
-        function (err) {
-          if (err) throw err;
-
-          athletesCnt += this.changes;
-          console.log(`Rows inserted ${athletesCnt} to "athletes"`);
-        }
-      );
-    }
+      for (let athlete in athletesObj) {
+        db.run(
+          'INSERT INTO athletes (full_name, age, sex, params, team_id) VALUES (?,?,?,?,?)',
+          athlete, athletesObj[athlete][0], athletesObj[athlete][1], athletesObj[athlete][2], athletesObj[athlete][3],
+          function (err) {
+            if (err) {
+              db.run('rollback');
+              throw err;
+            }
+            athletesCnt += this.changes;
+            console.log(`Rows inserted ${athletesCnt} to "athletes"`);
+          }
+        );
+      }
+      db.run('commit');
+    });
   });
 
-  updateTable(db, 'noc_name', 'team');
-  updateTable(db, 'full_name', 'athlete');
-  updateTable(db, 'name', 'sport');
-  updateTable(db, 'name', 'event');
-  updateTable(db, 'year, season', 'game');
+  db.run('begin');
+  try {
+    updateTable(db, 'noc_name', 'team');
+    updateTable(db, 'full_name', 'athlete');
+    updateTable(db, 'name', 'sport');
+    updateTable(db, 'name', 'event');
+    updateTable(db, 'year, season', 'game');
+  } catch (e) {
+    db.run('rollback');
+    throw e;
+  }
+  db.run('commit');
 
   db.close((err) => {
     if (err) throw err;
