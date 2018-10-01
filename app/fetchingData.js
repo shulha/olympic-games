@@ -5,7 +5,7 @@ let queryResult = [];
 let dataResult = [];
 
 let getData = function (cliParams) {
-  let db = new sqlite3.Database('./databases/test_db.db', (err) => {
+  let db = new sqlite3.Database('./databases/olympic_history.db', (err) => {
     if (err) throw err;
   });
 
