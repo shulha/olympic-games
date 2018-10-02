@@ -1,8 +1,9 @@
 const sqlite3 = require('sqlite3').verbose();
+const query = require('./sqlQueries');
 
 let maxValue = 0;
 let queryResult = [];
-let dataResult = [];
+const dataResult = [];
 
 let getData = function (cliParams) {
   let db = new sqlite3.Database('./databases/olympic_history.db', (err) => {
@@ -67,17 +68,7 @@ function getMedalsSql (cliParams) {
   let sqlQuery;
   let sqlParams;
   if (cliParams.medal) {
-    sqlQuery = `select t1.year, t2.medals
-                     from
-                     (select year from games where season=?) t1
-                     left join
-                     (select year, noc_name, count(medal) as medals
-                     from athletes,results,games,teams
-                     where athlete_id=athletes.id and game_id=games.id and team_id=teams.id
-                       and medal=? and season=? and noc_name=?
-                     group by noc_name, year) t2
-                     on t1.year = t2.year
-                     order by t1.year asc;`;
+    sqlQuery = query.medalsMedal;
     sqlParams = [
       getSeasonName(cliParams.season),
       getMedalTitle(cliParams.medal),
@@ -85,17 +76,7 @@ function getMedalsSql (cliParams) {
       cliParams.noc_name
     ];
   } else {
-    sqlQuery = `select t1.year, t2.medals
-                     from
-                     (select year from games where season=?) t1
-                     left join
-                     (select year, noc_name, count(medal) as medals
-                     from athletes,results,games,teams
-                     where athlete_id=athletes.id and game_id=games.id and team_id=teams.id
-                       and medal in (1,2,3) and season=? and noc_name=?
-                     group by noc_name, year) t2
-                     on t1.year = t2.year
-                     order by t1.year asc;`;
+    sqlQuery = query.medals;
     sqlParams = [
       getSeasonName(cliParams.season),
       getSeasonName(cliParams.season),
@@ -109,74 +90,26 @@ function getTopTeamsSql (cliParams) {
   let sqlQuery;
   let sqlParams;
   if (cliParams.medal && cliParams.year) {
-    sqlQuery = `select noc_name, count(medal) as medals
-                    from athletes,results,games,teams
-                    where athlete_id=athletes.id and game_id=games.id and team_id=teams.id
-                          and medal=$medal and season=$season and year=$year
-                    group by noc_name, year
-                    having medals >= (select AVG(medals)
-                                      from
-                                        (select noc_name, count(medal) as medals
-                                         from athletes,results,games,teams
-                                         where athlete_id=athletes.id and game_id=games.id and team_id=teams.id
-                                               and medal=$medal and season=$season and year=$year
-                                         group by noc_name, year))
-                    order by medals desc;`;
+    sqlQuery = query.topTeamsMedalYear;
     sqlParams = {
       $medal: getMedalTitle(cliParams.medal),
       $season: getSeasonName(cliParams.season),
       $year: cliParams.year
     };
   } else if (cliParams.medal && !cliParams.year) {
-    sqlQuery = `select noc_name, count(medal) as medals
-                    from athletes,results,games,teams
-                    where athlete_id=athletes.id and game_id=games.id and team_id=teams.id
-                          and medal=$medal and season=$season
-                    group by noc_name
-                    having medals >= (select AVG(medals)
-                                      from
-                                        (select noc_name, count(medal) as medals
-                                         from athletes,results,games,teams
-                                         where athlete_id=athletes.id and game_id=games.id and team_id=teams.id
-                                               and medal=$medal and season=$season
-                                         group by noc_name))
-                    order by medals desc;`;
+    sqlQuery = query.topTeamsMedal;
     sqlParams = {
       $medal: getMedalTitle(cliParams.medal),
       $season: getSeasonName(cliParams.season)
     };
   } else if (!cliParams.medal && cliParams.year) {
-    sqlQuery = `select noc_name, count(medal) as medals
-                    from athletes,results,games,teams
-                    where athlete_id=athletes.id and game_id=games.id and team_id=teams.id
-                          and medal in (1,2,3) and season=$season and year=$year
-                    group by noc_name, year
-                    having medals >= (select AVG(medals)
-                                      from
-                                        (select noc_name, count(medal) as medals
-                                         from athletes,results,games,teams
-                                         where athlete_id=athletes.id and game_id=games.id and team_id=teams.id
-                                               and medal in (1,2,3) and season=$season and year=$year
-                                         group by noc_name, year))
-                    order by medals desc;`;
+    sqlQuery = query.topTeamsYear;
     sqlParams = {
       $season: getSeasonName(cliParams.season),
       $year: cliParams.year
     };
   } else {
-    sqlQuery = `select noc_name, count(medal) as medals
-                    from athletes,results,games,teams
-                    where athlete_id=athletes.id and game_id=games.id and team_id=teams.id
-                          and medal in (1,2,3) and season=$season
-                    group by noc_name
-                    having medals >= (select AVG(medals)
-                                      from
-                                        (select noc_name, count(medal) as medals
-                                         from athletes,results,games,teams
-                                         where athlete_id=athletes.id and game_id=games.id and team_id=teams.id
-                                               and medal in (1,2,3) and season=$season
-                                         group by noc_name))
-                    order by medals desc;`;
+    sqlQuery = query.topTeams;
     sqlParams = {
       $season: getSeasonName(cliParams.season)
     };
