@@ -70,16 +70,16 @@ function getMedalsSql (cliParams) {
   if (cliParams.medal) {
     sqlQuery = query.medalsMedal;
     sqlParams = [
-      getSeasonName(cliParams.season),
-      getMedalTitle(cliParams.medal),
-      getSeasonName(cliParams.season),
+      getSeasonName[cliParams.season],
+      getMedalTitle[cliParams.medal],
+      getSeasonName[cliParams.season],
       cliParams.noc_name
     ];
   } else {
     sqlQuery = query.medals;
     sqlParams = [
-      getSeasonName(cliParams.season),
-      getSeasonName(cliParams.season),
+      getSeasonName[cliParams.season],
+      getSeasonName[cliParams.season],
       cliParams.noc_name
     ];
   }
@@ -92,26 +92,26 @@ function getTopTeamsSql (cliParams) {
   if (cliParams.medal && cliParams.year) {
     sqlQuery = query.topTeamsMedalYear;
     sqlParams = {
-      $medal: getMedalTitle(cliParams.medal),
-      $season: getSeasonName(cliParams.season),
+      $medal: getMedalTitle[cliParams.medal],
+      $season: getSeasonName[cliParams.season],
       $year: cliParams.year
     };
   } else if (cliParams.medal && !cliParams.year) {
     sqlQuery = query.topTeamsMedal;
     sqlParams = {
-      $medal: getMedalTitle(cliParams.medal),
-      $season: getSeasonName(cliParams.season)
+      $medal: getMedalTitle[cliParams.medal],
+      $season: getSeasonName[cliParams.season]
     };
   } else if (!cliParams.medal && cliParams.year) {
     sqlQuery = query.topTeamsYear;
     sqlParams = {
-      $season: getSeasonName(cliParams.season),
+      $season: getSeasonName[cliParams.season],
       $year: cliParams.year
     };
   } else {
     sqlQuery = query.topTeams;
     sqlParams = {
-      $season: getSeasonName(cliParams.season)
+      $season: getSeasonName[cliParams.season]
     };
   }
   return { sqlQuery, sqlParams };
@@ -121,33 +121,15 @@ function normalization (arg) {
   return Math.round(arg * 200 / maxValue);
 }
 
-function getMedalTitle (arg) {
-  let medalTitle;
-  switch (arg) {
-    case 'gold':
-      medalTitle = 1;
-      break;
-    case 'silver':
-      medalTitle = 2;
-      break;
-    case 'bronze':
-      medalTitle = 3;
-      break;
-  }
-  return medalTitle;
-}
+const getMedalTitle = {
+  'gold': 1,
+  'silver': 2,
+  'bronze': 3
+};
 
-function getSeasonName (arg) {
-  let season;
-  switch (arg) {
-    case 'winter':
-      season = 1;
-      break;
-    case 'summer':
-      season = 0;
-      break;
-  }
-  return season;
-}
+const getSeasonName = {
+  'winter': 1,
+  'summer': 0
+};
 
 module.exports = getData;
