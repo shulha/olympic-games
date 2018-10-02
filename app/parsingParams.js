@@ -20,8 +20,21 @@ if (!chartParams.includes('winter') && !chartParams.includes('summer')) {
 
 cliParams['chartName'] = chartName;
 
+if (chartName === 'medals') {
+  let nocFlag = false;
+
+  for (let param of chartParams) {
+    if (param.length === 3) { nocFlag = true; }
+  }
+
+  if (!nocFlag) {
+    console.log(`NOC name is required!`);
+    process.exit(1);
+  }
+}
+
 for (let param of chartParams) {
-  if (isNumeric(param)) {
+  if (Number.isInteger(Number(param))) {
     cliParams['year'] = +param;
   } else if (param === 'winter' || param === 'summer') {
     cliParams['season'] = param;
@@ -33,10 +46,6 @@ for (let param of chartParams) {
     console.log(`Invalid param ${param}`);
     process.exit(1);
   }
-}
-
-function isNumeric (n) {
-  return !isNaN(parseFloat(n)) && isFinite(n);
 }
 
 module.exports = cliParams;
