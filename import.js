@@ -27,7 +27,7 @@ let prevGame = '';
 let prevCity = '';
 
 rl.on('line', (line) => {
-  const arr = csvToArray(line).shift();
+  const arr = csvToArray(line);
 
   const sex = (arr[2] !== 'NA') ? arr[2] : null;
   const age = +arr[3] ? +arr[3] : null;
@@ -216,18 +216,21 @@ function insertSet (set, db, table) {
   });
 }
 
-function csvToArray (text) {
-  let p = ''; let row = ['']; let ret = [row]; let i = 0; let r = 0; let s = !0; let l;
-  for (l of text) {
-    if (l === '"') {
-      if (s && l === p) row[i] += l;
-      s = !s;
-    } else if (l === ',' && s) l = row[++i] = '';
-    else if (l === '\n' && s) {
-      if (p === '\r') row[i] = row[i].slice(0, -1);
-      row = ret[++r] = [l = '']; i = 0;
-    } else row[i] += l;
-    p = l;
+// функция конвертирует CSV-строку в массив, разделяя ее на элементы массива по запятым, но если
+// запятая встречается в слове, которое в кавычках, то такое слово переносится в массив целиком не разделяясь
+function csvToArray (str) {
+  let prevChar = ''; let row = ['']; let i = 0; let quote = true;
+
+  for (let char of str) {
+    if (char === '"') {
+      if (quote && char === prevChar) row[i] += char;
+      quote = !quote;
+    } else if (char === ',' && quote) {
+      char = row[++i] = '';
+    } else {
+      row[i] += char;
+    }
+    prevChar = char;
   }
-  return ret;
+  return row;
 }
