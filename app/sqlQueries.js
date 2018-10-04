@@ -1,82 +1,52 @@
-const getMedalsMedalQuery = `SELECT t1.year, t2.medals
-                             FROM (SELECT year 
-                                  FROM games 
-                                  WHERE season=?) t1
-                             LEFT JOIN (SELECT year, noc_name, COUNT(medal) AS medals
-                                        FROM athletes,results,games,teams
-                                        WHERE athlete_id=athletes.id AND game_id=games.id AND team_id=teams.id
-                                          AND medal=? AND season=? AND noc_name=?
-                                        GROUP BY noc_name, year) t2
-                             ON t1.year = t2.year
-                             ORDER BY t1.year ASC;`;
+const medalsQueryBuilder = `SELECT t1.year, t2.medals
+                            FROM (SELECT year 
+                                 FROM games 
+                                 WHERE season=?) t1
+                            LEFT JOIN (SELECT year, noc_name, COUNT(medal) AS medals
+                                       FROM athletes,results,games,teams
+                                       WHERE athlete_id=athletes.id AND game_id=games.id AND team_id=teams.id
+                                         AND {medal_placeholder} AND season=? AND noc_name=?
+                                       GROUP BY noc_name, year) t2
+                            ON t1.year = t2.year
+                            ORDER BY t1.year ASC;`;
 
-const getMedalsEmptyQuery = `SELECT t1.year, t2.medals
-                             FROM (SELECT year 
-                                   FROM games 
-                                   WHERE season=?) t1
-                             LEFT JOIN (SELECT year, noc_name, COUNT(medal) AS medals
-                                        FROM athletes,results,games,teams
-                                        WHERE athlete_id=athletes.id AND game_id=games.id AND team_id=teams.id
-                                          AND medal in (1,2,3) AND season=? AND noc_name=?
-                                        GROUP BY noc_name, year) t2
-                             ON t1.year = t2.year
-                             ORDER BY t1.year ASC;`;
+const getMedalsMedalQuery = medalsQueryBuilder.replace(/{medal_placeholder}/g, 'medal=?');
 
-const getTopTeamsMedalYearQuery = `SELECT noc_name, count(medal) AS medals
-                                   FROM athletes,results,games,teams
-                                   WHERE athlete_id=athletes.id AND game_id=games.id AND team_id=teams.id
-                                      AND medal=$medal AND season=$season AND year=$year
-                                   GROUP BY noc_name, year
-                                   HAVING medals >= (SELECT AVG(medals)
-                                                     FROM (SELECT noc_name, COUNT(medal) AS medals
-                                                           FROM athletes,results,games,teams
-                                                           WHERE athlete_id=athletes.id AND game_id=games.id AND team_id=teams.id
-                                                              AND medal=$medal AND season=$season AND year=$year
-                                                           GROUP BY noc_name, year)
-                                                     )
-                                   ORDER BY medals DESC;`;
+const getMedalsEmptyQuery = medalsQueryBuilder.replace(/{medal_placeholder}/g, 'medal in (1,2,3)');
 
-const getTopTeamsMedalQuery = `SELECT noc_name, COUNT(medal) AS medals
-                               FROM athletes,results,games,teams
-                               WHERE athlete_id=athletes.id AND game_id=games.id AND team_id=teams.id
-                                  AND medal=$medal AND season=$season
-                               GROUP BY noc_name
-                               HAVING medals >= (SELECT AVG(medals)
-                                                 FROM (SELECT noc_name, COUNT(medal) AS medals
-                                                       FROM athletes,results,games,teams
-                                                       WHERE athlete_id=athletes.id AND game_id=games.id AND team_id=teams.id
-                                                          AND medal=$medal AND season=$season
-                                                       GROUP BY noc_name)
-                                                 )
-                               ORDER BY medals DESC;`;
+const topTeamQueryBuilder = `SELECT noc_name, COUNT(medal) AS medals
+                             FROM athletes,results,games,teams
+                             WHERE athlete_id=athletes.id AND game_id=games.id AND team_id=teams.id
+                                AND {medal_placeholder} AND season=$season {year_placeholder}
+                             GROUP BY noc_name {group_year}
+                             HAVING medals >= (SELECT AVG(medals)
+                                               FROM (SELECT noc_name, COUNT(medal) AS medals
+                                                     FROM athletes,results,games,teams
+                                                     WHERE athlete_id=athletes.id AND game_id=games.id AND team_id=teams.id
+                                                        AND {medal_placeholder} AND season=$season {year_placeholder}
+                                                     GROUP BY noc_name {group_year})
+                                               )
+                             ORDER BY medals DESC;`;
 
-const getTopTeamsYearQuery = `SELECT noc_name, COUNT(medal) AS medals
-                              FROM athletes,results,games,teams
-                              WHERE athlete_id=athletes.id AND game_id=games.id AND team_id=teams.id
-                                    AND medal in (1,2,3) AND season=$season AND year=$year
-                              GROUP BY noc_name, year
-                              HAVING medals >= (SELECT AVG(medals)
-                                                FROM (select noc_name, COUNT(medal) AS medals
-                                                      FROM athletes,results,games,teams
-                                                      WHERE athlete_id=athletes.id AND game_id=games.id AND team_id=teams.id
-                                                        AND medal in (1,2,3) AND season=$season AND year=$year
-                                                      GROUP BY noc_name, year)
-                                                )
-                              ORDER BY medals DESC;`;
+const getTopTeamsMedalYearQuery = topTeamQueryBuilder
+  .replace(/{medal_placeholder}/g, 'medal=$medal')
+  .replace(/{year_placeholder}/g, 'AND year=$year')
+  .replace(/{group_year}/g, ', year');
 
-const getTopTeamsEmptyQuery = `SELECT noc_name, COUNT(medal) AS medals
-                               FROM athletes,results,games,teams
-                               WHERE athlete_id=athletes.id AND game_id=games.id AND team_id=teams.id
-                                 AND medal in (1,2,3) AND season=$season
-                               GROUP BY noc_name
-                               HAVING medals >= (SELECT AVG(medals)
-                                                 FROM (SELECT noc_name, COUNT(medal) AS medals
-                                                       FROM athletes,results,games,teams
-                                                       WHERE athlete_id=athletes.id AND game_id=games.id AND team_id=teams.id
-                                                          AND medal in (1,2,3) AND season=$season
-                                                       GROUP BY noc_name)
-                                                 )
-                               ORDER BY medals DESC;`;
+const getTopTeamsMedalQuery = topTeamQueryBuilder
+  .replace(/{medal_placeholder}/g, 'medal=$medal')
+  .replace(/{year_placeholder}/g, '')
+  .replace(/{group_year}/g, '');
+
+const getTopTeamsYearQuery = topTeamQueryBuilder
+  .replace(/{medal_placeholder}/g, 'medal in (1,2,3)')
+  .replace(/{year_placeholder}/g, 'AND year=$year')
+  .replace(/{group_year}/g, ', year');
+
+const getTopTeamsEmptyQuery = topTeamQueryBuilder
+  .replace(/{medal_placeholder}/g, 'medal in (1,2,3)')
+  .replace(/{year_placeholder}/g, '')
+  .replace(/{group_year}/g, '');
 
 module.exports = {
   getMedalsMedalQuery,
