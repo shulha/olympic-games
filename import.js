@@ -9,28 +9,35 @@ const rl = readline.createInterface({
   crlfDelay: Infinity
 });
 
-let sportsSet = new Set();
-let eventsSet = new Set();
-let athletesObj = {};
-let teamsObj = {};
-let gamesObj = {};
-let resultsArray = [];
+const sportsSet = new Set();
+const eventsSet = new Set();
+const athletesObj = {};
+const teamsObj = {};
+const gamesObj = {};
+const resultsArray = [];
+
+const medals = {
+  'NA': 0,
+  'Gold': 1,
+  'Silver': 2,
+  'Bronze': 3
+};
 
 let prevGame = '';
 let prevCity = '';
 
 rl.on('line', (line) => {
-  let arr = csvToArray(line).shift();
+  const arr = csvToArray(line).shift();
 
-  let sex = (arr[2] !== 'NA') ? arr[2] : null;
-  let age = +arr[3] ? +arr[3] : null;
-  let params = {};
-  if (+arr[4]) params['height'] = +arr[4];
-  if (+arr[5]) params['weight'] = +arr[5];
+  const sex = (arr[2] !== 'NA') ? arr[2] : null;
+  const age = +arr[3] ? +arr[3] : null;
+  const params = {};
+  if (arr[4]) params['height'] = +arr[4];
+  if (arr[5]) params['weight'] = +arr[5];
 
-  let noc = arr[7];
+  const noc = arr[7];
 
-  let athleteName = arr[1].replace(/"+([^"]+)"+\s|"|(\(.*?\))*/g, '').trim();
+  const athleteName = arr[1].replace(/"+([^"]+)"+\s|"|(\(.*?\))*/g, '').trim();
 
   athletesObj[athleteName] = [
     sex,
@@ -55,24 +62,8 @@ rl.on('line', (line) => {
   prevCity = nextCity;
   prevGame = nextGame;
 
-  let medalFile = arr[14];
   if (nextGame !== '1906 Summer') {
-    let medal;
-    switch (medalFile) {
-      case 'NA':
-        medal = 0;
-        break;
-      case 'Gold':
-        medal = 1;
-        break;
-      case 'Silver':
-        medal = 2;
-        break;
-      case 'Bronze':
-        medal = 3;
-        break;
-    }
-    resultsArray.push([athleteName, arr[8], arr[12], arr[13], medal]);
+    resultsArray.push([athleteName, arr[8], arr[12], arr[13], medals[arr[14]]]);
   }
 });
 
