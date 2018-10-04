@@ -68,7 +68,7 @@ function getMedalsSql (cliParams) {
   let sqlQuery;
   let sqlParams;
   if (cliParams.medal) {
-    sqlQuery = query.medalsMedal;
+    sqlQuery = query.getMedalsMedalQuery;
     sqlParams = [
       getSeasonName[cliParams.season],
       getMedalTitle[cliParams.medal],
@@ -76,7 +76,7 @@ function getMedalsSql (cliParams) {
       cliParams.noc_name
     ];
   } else {
-    sqlQuery = query.medals;
+    sqlQuery = query.getMedalsEmptyQuery;
     sqlParams = [
       getSeasonName[cliParams.season],
       getSeasonName[cliParams.season],
@@ -90,26 +90,26 @@ function getTopTeamsSql (cliParams) {
   let sqlQuery;
   let sqlParams;
   if (cliParams.medal && cliParams.year) {
-    sqlQuery = query.topTeamsMedalYear;
+    sqlQuery = query.getTopTeamsMedalYearQuery;
     sqlParams = {
       $medal: getMedalTitle[cliParams.medal],
       $season: getSeasonName[cliParams.season],
       $year: cliParams.year
     };
   } else if (cliParams.medal && !cliParams.year) {
-    sqlQuery = query.topTeamsMedal;
+    sqlQuery = query.getTopTeamsMedalQuery;
     sqlParams = {
       $medal: getMedalTitle[cliParams.medal],
       $season: getSeasonName[cliParams.season]
     };
   } else if (!cliParams.medal && cliParams.year) {
-    sqlQuery = query.topTeamsYear;
+    sqlQuery = query.getTopTeamsYearQuery;
     sqlParams = {
       $season: getSeasonName[cliParams.season],
       $year: cliParams.year
     };
   } else {
-    sqlQuery = query.topTeams;
+    sqlQuery = query.getTopTeamsEmptyQuery;
     sqlParams = {
       $season: getSeasonName[cliParams.season]
     };
