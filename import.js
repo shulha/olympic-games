@@ -1,12 +1,13 @@
 const sqlite3 = require('sqlite3').verbose();
 const readline = require('readline');
 const fs = require('fs');
+const col = require('./databases/columnName');
 
 const rl = readline.createInterface({
-  input: fs.createReadStream('databases/athlete_events.csv', {
-    start: 111
+  input: fs.createReadStream('databases/sandbox.csv', {
+    start: 80,
   }),
-  crlfDelay: Infinity
+  crlfDelay: Infinity,
 });
 
 const sportsSet = new Set();
@@ -17,11 +18,33 @@ const gamesObj = {};
 const resultsArray = [];
 
 const medals = {
-  'NA': 0,
-  'Gold': 1,
-  'Silver': 2,
-  'Bronze': 3
+  NA: 0,
+  Gold: 1,
+  Silver: 2,
+  Bronze: 3,
 };
+
+// функция конвертирует CSV-строку в массив, разделяя ее на элементы массива по запятым,
+// но если запятая встречается в слове, которое в кавычках,
+// то такое слово переносится в массив целиком не разделяясь
+function csvToArray(str) {
+  const row = [''];
+  let prevChar = ''; let i = 0; let quote = true;
+
+  for (let c = 0; c < str.length; c += 1) {
+    if (str[c] === '"') {
+      if (quote && str[c] === prevChar) row[i] += str[c];
+      quote = !quote;
+    } else if (str[c] === ',' && quote) {
+      i += 1;
+      str[c] = row[i] = '';
+    } else {
+      row[i] += str[c];
+    }
+    prevChar = str[c];
+  }
+  return row;
+}
 
 let prevGame = '';
 let prevCity = '';
@@ -29,33 +52,33 @@ let prevCity = '';
 rl.on('line', (line) => {
   const arr = csvToArray(line);
 
-  const sex = (arr[2] !== 'NA') ? arr[2] : null;
-  const age = +arr[3] ? +arr[3] : null;
+  const sex = (arr[col.sex] !== 'NA') ? arr[col.sex] : null;
+  const age = +arr[col.age] ? +arr[col.age] : null;
   const params = {};
-  if (arr[4]) params['height'] = +arr[4];
-  if (arr[5]) params['weight'] = +arr[5];
+  if (arr[col.height]) params.height = +arr[col.height];
+  if (arr[col.weight]) params.weight = +arr[col.weight];
 
-  const noc = arr[7];
+  const noc = arr[col.NOC];
 
-  const athleteName = arr[1].replace(/"+([^"]+)"+\s|"|(\(.*?\))*/g, '').trim();
+  const athleteName = arr[col.name].replace(/"+([^"]+)"+\s|"|(\(.*?\))*/g, '').trim();
 
   athletesObj[athleteName] = [
     sex,
     age,
     JSON.stringify(params),
-    noc
+    noc,
   ];
 
-  sportsSet.add(arr[12]);
+  sportsSet.add(arr[col.sport]);
 
-  eventsSet.add(arr[13]);
+  eventsSet.add(arr[col.evnt]);
 
-  teamsObj[noc] = arr[6].replace(/-\d+$/g, '');
+  teamsObj[noc] = arr[col.team].replace(/-\d+$/g, '');
 
-  let nextGame = arr[8];
-  let nextCity = arr[11];
+  const nextGame = arr[col.games];
+  const nextCity = arr[col.city];
   if (nextGame === '1906 Summer') {} else if (prevGame === nextGame && prevCity !== nextCity) {
-    gamesObj[nextGame] += ', ' + nextCity;
+    gamesObj[nextGame] += `, ${nextCity}`;
   } else {
     gamesObj[nextGame] = nextCity;
   }
@@ -63,12 +86,18 @@ rl.on('line', (line) => {
   prevGame = nextGame;
 
   if (nextGame !== '1906 Summer') {
-    resultsArray.push([athleteName, arr[8], arr[12], arr[13], medals[arr[14]]]);
+    resultsArray.push([
+      athleteName,
+      arr[col.games],
+      arr[col.sport],
+      arr[col.evnt],
+      medals[arr[col.medal]],
+    ]);
   }
 });
 
-rl.on('close', function () {
-  let db = new sqlite3.Database('databases/olympic_history.db', sqlite3.OPEN_READWRITE, (err) => {
+rl.on('close', () => {
+  const db = new sqlite3.Database('databases/test_db.db', sqlite3.OPEN_READWRITE, (err) => {
     if (err) throw err;
 
     console.log('Connected to the olympic_history database.');
@@ -80,9 +109,9 @@ rl.on('close', function () {
 
     insertSet(eventsSet, db, 'events');
 
-    db.serialize(function () {
+    db.serialize(() => {
       db.run('begin');
-      for (let oneRow of resultsArray) {
+      for (const oneRow of resultsArray) {
         db.run(
           'INSERT INTO results (athlete_id, game_id, sport_id, event_id, medal) VALUES (?,?,?,?,?)',
           oneRow,
@@ -94,14 +123,14 @@ rl.on('close', function () {
 
             resultsCnt += this.changes;
             console.log(`Rows inserted ${resultsCnt} to "results"`);
-          }
+          },
         );
       }
-      for (let game in gamesObj) {
-        let cities = gamesObj[game];
-        let gameArray = game.split(' ');
-        let year = gameArray[0];
-        let season = (gameArray[1] === 'Summer') ? 0 : 1;
+      for (const game in gamesObj) {
+        const cities = gamesObj[game];
+        const gameArray = game.split(' ');
+        const year = gameArray[0];
+        const season = (gameArray[1] === 'Summer') ? 0 : 1;
         db.run(
           'INSERT INTO games (year, season, city) VALUES (?,?,?)',
           year, season, cities,
@@ -113,10 +142,10 @@ rl.on('close', function () {
 
             gamesCnt += this.changes;
             console.log(`Rows inserted ${gamesCnt} to "games"`);
-          }
+          },
         );
       }
-      for (let key in teamsObj) {
+      for (const key in teamsObj) {
         db.run(
           'INSERT INTO teams (name, noc_name) VALUES (?,?)',
           teamsObj[key], key,
@@ -128,11 +157,11 @@ rl.on('close', function () {
 
             teamsCnt += this.changes;
             console.log(`Rows inserted ${teamsCnt} to "teams"`);
-          }
+          },
         );
       }
 
-      for (let athlete in athletesObj) {
+      for (const athlete in athletesObj) {
         db.run(
           'INSERT INTO athletes (full_name, age, sex, params, team_id) VALUES (?,?,?,?,?)',
           athlete, athletesObj[athlete][0], athletesObj[athlete][1], athletesObj[athlete][2], athletesObj[athlete][3],
@@ -143,7 +172,7 @@ rl.on('close', function () {
             }
             athletesCnt += this.changes;
             console.log(`Rows inserted ${athletesCnt} to "athletes"`);
-          }
+          },
         );
       }
       db.run('commit');
@@ -170,15 +199,15 @@ rl.on('close', function () {
   });
 });
 
-function updateTable (db, colName, selectedTable) {
-  let tmpArray = [];
-  db.all('SELECT id, ' + colName + ' FROM ' + selectedTable + 's', [], (err, rows) => {
+function updateTable(db, colName, selectedTable) {
+  const tmpArray = [];
+  db.all(`SELECT id, ${colName} FROM ${selectedTable}s`, [], (err, rows) => {
     if (err) throw err;
 
     if (selectedTable === 'game') {
       rows.forEach((row) => {
-        let season = (row.season === 0) ? 'Summer' : 'Winter';
-        tmpArray.push([row.id, row.year + ' ' + season]);
+        const season = (row.season === 0) ? 'Summer' : 'Winter';
+        tmpArray.push([row.id, `${row.year} ${season}`]);
       });
     } else {
       rows.forEach((row) => {
@@ -191,8 +220,8 @@ function updateTable (db, colName, selectedTable) {
       _table = 'athletes';
     }
 
-    for (let data of tmpArray) {
-      let sql = `UPDATE ${_table}
+    for (const data of tmpArray) {
+      const sql = `UPDATE ${_table}
         SET ${selectedTable}_id = ?
         WHERE ${selectedTable}_id = ?`;
 
@@ -205,32 +234,13 @@ function updateTable (db, colName, selectedTable) {
   });
 }
 
-function insertSet (set, db, table) {
-  let array = Array.from(set);
-  let placeholders = array.map((arg) => '(?)').join(',');
-  let sql = 'INSERT INTO ' + table + '(name) VALUES ' + placeholders;
+function insertSet(set, db, table) {
+  const array = Array.from(set);
+  const placeholders = array.map(() => '(?)').join(',');
+  const sql = `INSERT INTO ${table}(name) VALUES ${placeholders}`;
   db.run(sql, array, function (err) {
     if (err) throw err;
 
     console.log(`Rows inserted ${this.changes} to "${table}"`);
   });
-}
-
-// функция конвертирует CSV-строку в массив, разделяя ее на элементы массива по запятым, но если
-// запятая встречается в слове, которое в кавычках, то такое слово переносится в массив целиком не разделяясь
-function csvToArray (str) {
-  let prevChar = ''; let row = ['']; let i = 0; let quote = true;
-
-  for (let char of str) {
-    if (char === '"') {
-      if (quote && char === prevChar) row[i] += char;
-      quote = !quote;
-    } else if (char === ',' && quote) {
-      char = row[++i] = '';
-    } else {
-      row[i] += char;
-    }
-    prevChar = char;
-  }
-  return row;
 }
