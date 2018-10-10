@@ -24,6 +24,11 @@ const medals = {
   Bronze: 3,
 };
 
+const getSeasonName = {
+  Winter: 1,
+  Summer: 0,
+};
+
 // функция конвертирует CSV-строку в массив, разделяя ее на элементы массива по запятым,
 // но если запятая встречается в слове, которое в кавычках,
 // то такое слово переносится в массив целиком не разделяясь
@@ -44,6 +49,17 @@ function csvToArray(str) {
     prevChar = str[c];
   }
   return row;
+}
+
+function insertSet(set, db, table) {
+  const array = Array.from(set);
+  const placeholders = array.map(() => '(?)').join(',');
+  const sql = `INSERT INTO ${table}(name) VALUES ${placeholders}`;
+  db.run(sql, array, function (err) {
+    if (err) throw err;
+
+    console.log(`Rows inserted ${this.changes} to "${table}"`);
+  });
 }
 
 let prevGame = '';
@@ -77,18 +93,19 @@ rl.on('line', (line) => {
 
   const nextGame = arr[col.games];
   const nextCity = arr[col.city];
-  if (nextGame === '1906 Summer') {} else if (prevGame === nextGame && prevCity !== nextCity) {
-    gamesObj[nextGame] += `, ${nextCity}`;
-  } else {
-    gamesObj[nextGame] = nextCity;
-  }
-  prevCity = nextCity;
-  prevGame = nextGame;
-
   if (nextGame !== '1906 Summer') {
+    if (prevGame === nextGame && prevCity !== nextCity) {
+      gamesObj[nextGame] += `, ${nextCity}`;
+    } else {
+      gamesObj[nextGame] = nextCity;
+    }
+    prevCity = nextCity;
+    prevGame = nextGame;
+
     resultsArray.push([
       athleteName,
-      arr[col.games],
+      arr[col.year],
+      getSeasonName[arr[col.season]],
       arr[col.sport],
       arr[col.evnt],
       medals[arr[col.medal]],
@@ -111,22 +128,8 @@ rl.on('close', () => {
 
     db.serialize(() => {
       db.run('begin');
-      for (const oneRow of resultsArray) {
-        db.run(
-          'INSERT INTO results (athlete_id, game_id, sport_id, event_id, medal) VALUES (?,?,?,?,?)',
-          oneRow,
-          function (err) {
-            if (err) {
-              db.run('rollback');
-              throw err;
-            }
 
-            resultsCnt += this.changes;
-            console.log(`Rows inserted ${resultsCnt} to "results"`);
-          },
-        );
-      }
-      for (const game in gamesObj) {
+      Object.keys(gamesObj).forEach((game) => {
         const cities = gamesObj[game];
         const gameArray = game.split(' ');
         const year = gameArray[0];
@@ -144,8 +147,9 @@ rl.on('close', () => {
             console.log(`Rows inserted ${gamesCnt} to "games"`);
           },
         );
-      }
-      for (const key in teamsObj) {
+      });
+
+      Object.keys(teamsObj).forEach((key) => {
         db.run(
           'INSERT INTO teams (name, noc_name) VALUES (?,?)',
           teamsObj[key], key,
@@ -159,12 +163,12 @@ rl.on('close', () => {
             console.log(`Rows inserted ${teamsCnt} to "teams"`);
           },
         );
-      }
+      });
 
-      for (const athlete in athletesObj) {
+      Object.keys(athletesObj).forEach((athlete) => {
         db.run(
-          'INSERT INTO athletes (full_name, age, sex, params, team_id) VALUES (?,?,?,?,?)',
-          athlete, athletesObj[athlete][0], athletesObj[athlete][1], athletesObj[athlete][2], athletesObj[athlete][3],
+          `INSERT INTO athletes (full_name, sex, age, params, team_id) VALUES (?,?,?,?,(SELECT id FROM teams where noc_name="${athletesObj[athlete][3]}"))`,
+          athlete, athletesObj[athlete][0], athletesObj[athlete][1], athletesObj[athlete][2],
           function (err) {
             if (err) {
               db.run('rollback');
@@ -174,23 +178,31 @@ rl.on('close', () => {
             console.log(`Rows inserted ${athletesCnt} to "athletes"`);
           },
         );
-      }
+      });
+      db.run('commit');
+
+      db.run('begin');
+      resultsArray.forEach((oneRow) => {
+        db.run(`INSERT INTO results (athlete_id, game_id, sport_id, event_id, medal)
+                VALUES ((SELECT id FROM athletes WHERE full_name="${oneRow[0]}"),
+                        (SELECT id FROM games WHERE year="${oneRow[1]}" AND season="${oneRow[2]}"),
+                        (SELECT id FROM sports WHERE name="${oneRow[3]}"),
+                        (SELECT id FROM events WHERE name="${oneRow[4]}"),
+                        ${oneRow[5]}
+                       )`,
+        function (err) {
+          if (err) {
+            db.run('rollback');
+            throw err;
+          }
+
+          resultsCnt += this.changes;
+          console.log(`Rows inserted ${resultsCnt} to "results"`);
+        });
+      });
       db.run('commit');
     });
   });
-
-  db.run('begin');
-  try {
-    updateTable(db, 'noc_name', 'team');
-    updateTable(db, 'full_name', 'athlete');
-    updateTable(db, 'name', 'sport');
-    updateTable(db, 'name', 'event');
-    updateTable(db, 'year, season', 'game');
-  } catch (e) {
-    db.run('rollback');
-    throw e;
-  }
-  db.run('commit');
 
   db.close((err) => {
     if (err) throw err;
@@ -198,49 +210,3 @@ rl.on('close', () => {
     console.log('Close the database connection.');
   });
 });
-
-function updateTable(db, colName, selectedTable) {
-  const tmpArray = [];
-  db.all(`SELECT id, ${colName} FROM ${selectedTable}s`, [], (err, rows) => {
-    if (err) throw err;
-
-    if (selectedTable === 'game') {
-      rows.forEach((row) => {
-        const season = (row.season === 0) ? 'Summer' : 'Winter';
-        tmpArray.push([row.id, `${row.year} ${season}`]);
-      });
-    } else {
-      rows.forEach((row) => {
-        tmpArray.push([row.id, row[colName]]);
-      });
-    }
-
-    let _table = 'results';
-    if (selectedTable === 'team') {
-      _table = 'athletes';
-    }
-
-    for (const data of tmpArray) {
-      const sql = `UPDATE ${_table}
-        SET ${selectedTable}_id = ?
-        WHERE ${selectedTable}_id = ?`;
-
-      db.run(sql, data, function (err) {
-        if (err) throw err;
-
-        console.log(`Row(s) updated: ${this.changes} in "${_table}"`);
-      });
-    }
-  });
-}
-
-function insertSet(set, db, table) {
-  const array = Array.from(set);
-  const placeholders = array.map(() => '(?)').join(',');
-  const sql = `INSERT INTO ${table}(name) VALUES ${placeholders}`;
-  db.run(sql, array, function (err) {
-    if (err) throw err;
-
-    console.log(`Rows inserted ${this.changes} to "${table}"`);
-  });
-}
