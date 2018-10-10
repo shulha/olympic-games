@@ -4,8 +4,8 @@ const fs = require('fs');
 const col = require('./databases/columnName');
 
 const rl = readline.createInterface({
-  input: fs.createReadStream('databases/sandbox.csv', {
-    start: 80,
+  input: fs.createReadStream('databases/athlete_events.csv', {
+    start: 111,
   }),
   crlfDelay: Infinity,
 });
@@ -114,14 +114,22 @@ rl.on('line', (line) => {
 });
 
 rl.on('close', () => {
-  const db = new sqlite3.Database('databases/test_db.db', sqlite3.OPEN_READWRITE, (err) => {
+  const db = new sqlite3.Database('databases/olympic_history.db', sqlite3.OPEN_READWRITE, (err) => {
     if (err) throw err;
 
+    console.time('import');
     console.log('Connected to the olympic_history database.');
   });
 
   let resultsCnt = 0; let gamesCnt = 0; let teamsCnt = 0; let athletesCnt = 0;
   db.serialize(() => {
+    db.run('DELETE FROM athletes');
+    db.run('DELETE FROM events');
+    db.run('DELETE FROM games');
+    db.run('DELETE FROM results');
+    db.run('DELETE FROM sports');
+    db.run('DELETE FROM teams');
+
     insertSet(sportsSet, db, 'sports');
 
     insertSet(eventsSet, db, 'events');
@@ -208,5 +216,6 @@ rl.on('close', () => {
     if (err) throw err;
 
     console.log('Close the database connection.');
+    console.timeEnd('import');
   });
 });
